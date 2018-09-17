@@ -36,11 +36,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "ADCSWTrigger.h"
 #include "tm4c123gh6pm.h"
 #include "ST7735.h"
 #include "PLL.h"
 #include "Timer1.h"
+#include "fixed.h"
 
 #define PF2             (*((volatile uint32_t *)0x40025010))
 #define PF1             (*((volatile uint32_t *)0x40025008))
@@ -66,7 +68,7 @@ volatile static uint32_t currentADCDump[dumpSize];   // Array (dump) of ADC Valu
 volatile uint32_t largestTime = 0;
 volatile uint32_t smallestTime = 0xFFFFFFFF;
 volatile static uint32_t timeDifference[dumpSize];
-volatile uint32_t timeJitter;
+volatile uint32_t timeJitter, timeJitter1;
 
 // PREPARATION (6)
 //   PROCESSING DATA RECORDINGS 
@@ -107,9 +109,9 @@ void Timer0A_Handler(void){
   PF2 ^= 0x04;                                       // profile
 	
 	if (dumpIndex < dumpSize) {                        // Check to see if the current dump index is less than the dump size (1000)  
-		currentTimeDump[dumpIndex] = TIMER1_TAR_R;       // Read current time - Set current dump index value of currentTimeDump to TIMER1_TAR_R (returns the current time)
-		currentADCDump[dumpIndex] = ADCvalue;            // Read ADC value - Set current dump index value of currentADCDump to ADCvalue
-		dumpIndex += 1;                                  // Increase dump index by 1
+		currentTimeDump[dumpIndex%1000] = TIMER1_TAR_R;       // Read current time - Set current dump index value of currentTimeDump to TIMER1_TAR_R (returns the current time)
+		currentADCDump[dumpIndex%1000] = ADCvalue;            // Read ADC value - Set current dump index value of currentADCDump to ADCvalue
+		//dumpIndex += 1;                                  // Increase dump index by 1
 	}
 }
 
@@ -363,8 +365,8 @@ int main(void){
 	
 // DATA COLLECTION PHASE
   while (dumpIndex < dumpSize) {
-		//PF1 ^= 0x02;
-		PF1 = (PF1 * 12345678) / 1234567 + 0x02;                       // this line causes jitter
+		PF1 ^= 0x02;
+		//PF1 = (PF1 * 12345678) / 1234567 + 0x02;                       // this line causes jitter
 	}
 // END OF DATA COLLECTION PHASE
 	
@@ -391,7 +393,8 @@ int main(void){
 	// After calculating 999 time differences, determine time jitter
 	// Time Jitter is the difference between the largest and smallest time difference
 	// Hence, largestTime - smallestTime = Time Jitter
-	timeJitter = ((abs(largestTime - smallestTime)) / 10000); // If this value is larger than 10 ms, this signifies an error
+	timeJitter = (abs(largestTime - smallestTime)); 
+	timeJitter1 = (timeJitter) * (float)12.5 * (float)pow(10,-9) * 1000; // If this value is larger than 10 ms, this signifies an error
 	
 	/*
 	if (timeJitter > 10ms) {// calculate value for 10 ms
@@ -404,8 +407,11 @@ int main(void){
 //   Create a Probability Mass Function of the measured data.
 //   The shape of this curve descirbes the noise process.
 //   The x-axis has the ADC value and the y-axis is the number of occurrences of that ADC value.
+	for(int i=0; i<4096; i++){
+		no_occurrences[i] = 0;
+	}
   for(dataRecordingsIndex = 0; dataRecordingsIndex < no_DataRecordings; dataRecordingsIndex++) {
-	  no_occurrences[currentADCDump[dataRecordingsIndex]] += 1; // Increment the number of occurrences of each ADC value collected prior to now
+	  no_occurrences[(int)currentADCDump[dataRecordingsIndex]] += 1; // Increment the number of occurrences of each ADC value collected prior to now
 		                                                          // Essentially the Y-axis of a PMF histogram, with X-axis being the ADC values collected  
     if (currentADCDump[dataRecordingsIndex] < smallestADCValue) {
 		  smallestADCValue = currentADCDump[dataRecordingsIndex];
@@ -425,12 +431,44 @@ int main(void){
 	}
 	ST7735_FillScreen(ST7735_BLACK); 
 	ST7735_SetCursor(0,0);
-  printf("EE 445L Lab 2\rTime Jitter: %d ms", timeJitter);
-  ST7735_PlotClear(min,max);
-	for(int i=0; i<1000; i++){
-	  ST7735_PlotLine(no_occurrences[i]);
-		//ST7735_PlotBar(no_occurrences[i]);
+	
+	printf("%d to %d", smallestADCValue, largestADCValue);
+	DelayWait(75000000);
+	
+  ST7735_FillScreen(ST7735_BLACK); 
+	ST7735_SetCursor(0,0);
+  printf("EE 445L Lab 2\rTime Jitter: %d ms\r%d", timeJitter1, timeJitter);
+
+  ST7735_PlotClear(0,max);
+	
+	for(int i=1900; i<2200; i++){
+			//ST7735_DrawPixel((float)i*((float)127/(float)(4096)), 159 - (float)no_occurrences[i]*((float)127/(float)(max)), ST7735_BLUE);
+			ST7735_PlotLine(no_occurrences[i]);
+			//ST7735_PlotBar(no_occurrences[i]);
+			ST7735_PlotNext();
+		}
+	
+	/*
+	if((largestADCValue - smallestADCValue) >= 127){
+		for(int i=smallestADCValue; i<largestADCValue; i++){
+			//ST7735_DrawPixel((float)i*((float)127/(float)(4096)), 159 - (float)no_occurrences[i]*((float)127/(float)(max)), ST7735_BLUE);
+			ST7735_PlotLine(no_occurrences[i]);
+			//ST7735_PlotBar(no_occurrences[i]);
+			ST7735_PlotNext();
+		}
 	}
+	else{
+		int midValue = (largestADCValue + smallestADCValue)/2;
+		for(int i=midValue - 64; i<midValue + 64; i++){
+			//ST7735_DrawPixel((float)i*((float)127/(float)(4096)), 159 - (float)no_occurrences[i]*((float)127/(float)(max)), ST7735_BLUE);
+			ST7735_PlotLine(no_occurrences[i]);
+			//ST7735_PlotBar(no_occurrences[i]);
+			ST7735_PlotNext();
+		}
+	}
+	*/
+	
+	
 	DelayWait(150000000);
 	while(1){
     Lab2_Demo_DrawLines();

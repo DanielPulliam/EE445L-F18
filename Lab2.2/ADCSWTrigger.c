@@ -22,7 +22,7 @@
  http://users.ece.utexas.edu/~valvano/
  */
 #include <stdint.h>
-#include "../inc/tm4c123gh6pm.h"
+#include "tm4c123gh6pm.h"
 
 // There are many choices to make when using the ADC, and many
 // different combinations of settings will all do basically the

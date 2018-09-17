@@ -52,6 +52,8 @@
 // VCC (pin 2) connected to +3.3 V
 // Gnd (pin 1) connected to ground
 
+#include <stdint.h>
+
 #ifndef _ST7735H_
 #define _ST7735H_
 
@@ -420,6 +422,8 @@ void Output_On(void);
 // Output: none
 void Output_Color(uint32_t newColor); 
 
-void ST7735_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
+void DiagonalLine(int16_t rise, int16_t run, int16_t x, int16_t x1, int16_t y1, uint16_t color);
+
+void ST7735_DrawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
 
 #endif
